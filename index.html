@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk WHOIS / RDAP Lookup Tool</title>
+    <style>
+        :root {
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --primary-color: #24292e;
+            --accent-color: #0366d6;
+            --success-color: #28a745;
+            --border-color: #e1e4e8;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0 0 10px 0;
+            color: var(--primary-color);
+        }
+
+        header p {
+            color: #586069;
+            margin: 0;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 12px;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            resize: vertical;
+            margin-bottom: 15px;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(3,102,214,0.3);
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: 1px solid transparent;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #444d56;
+        }
+
+        button:disabled {
+            background-color: #959da5;
+            cursor: not-allowed;
+        }
+
+        button.btn-success {
+            background-color: var(--success-color);
+        }
+
+        button.btn-success:hover {
+            background-color: #22863a;
+        }
+
+        .progress-container {
+            margin-top: 15px;
+            display: none;
+        }
+
+        .progress-bar-bg {
+            background-color: var(--border-color);
+            border-radius: 4px;
+            height: 8px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            background-color: var(--accent-color);
+            height: 100%;
+            width: 0%;
+            transition: width 0.2s ease;
+        }
+
+        .progress-text {
+            font-size: 12px;
+            color: #586069;
+            margin-top: 5px;
+            display: block;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f6f8fa;
+            color: var(--primary-color);
+            font-weight: 600;
+            padding: 12px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        tr:hover {
+            background-color: #f6f8fa;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 20px;
+        }
+
+        .status-success { background: #dcedc8; color: #33691e; }
+        .status-error { background: #ffcdd2; color: #b71c1c; }
+        .status-pending { background: #ffe0b2; color: #e65100; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Bulk WHOIS (RDAP) Information Checker</h1>
+        <p>Analyze domain registration details completely in your browser. Perfect for clean deployment on GitHub Pages.</p>
+    </header>
+
+    <div class="card">
+        <label for="domainsInput" style="font-weight: 600; display: block; margin-bottom: 8px;">Enter Domains (One per line):</label>
+        <textarea id="domainsInput" placeholder="example.com&#10;github.com&#10;google.net"></textarea>
+        
+        <div class="actions">
+            <button id="startBtn" onclick="processDomains()">Run Bulk Lookup</button>
+            <button id="exportBtn" class="btn-success" onclick="exportToCSV()" disabled>Export Result to CSV</button>
+        </div>
+
+        <div id="progressContainer" class="progress-container">
+            <div class="progress-bar-bg">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+            <span id="progressText" class="progress-text">Processing: 0 / 0</span>
+        </div>
+    </div>
+
+    <div class="card table-wrapper">
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    <th>Domain</th>
+                    <th>Status</th>
+                    <th>Registrar</th>
+                    <th>Registration Date</th>
+                    <th>Expiration Date</th>
+                    <th>Last Updated</th>
+                    <th>Nameservers</th>
+                </tr>
+            </thead>
+            <tbody id="resultsBody">
+                <tr>
+                    <td colspan="7" style="text-align: center; color: #959da5; padding: 40px;">No domain data looked up yet.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let lookupResults = [];
+
+    // Helper sleep function to respect API limits and maintain window painting
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    function cleanDomain(input) {
+        let domain = input.trim().toLowerCase();
+        // Extract domain from URLs if users accidentally paste them
+        domain = domain.replace(/^(https?:\/\/)?(www\.)?/, '');
+        domain = domain.split('/')[0];
+        return domain;
+    }
+
+    async function processDomains() {
+        const inputData = document.getElementById('domainsInput').value;
+        const lines = inputData.split('\n');
+        
+        // Filter out empty lines
+        const domains = [...new Set(lines.map(cleanDomain).filter(d => d.length > 0))];
+
+        if (domains.length === 0) {
+            alert('Please enter at least one valid domain.');
+            return;
+        }
+
+        // Reset state
+        lookupResults = [];
+        const tbody = document.getElementById('resultsBody');
+        const startBtn = document.getElementById('startBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+
+        tbody.innerHTML = '';
+        startBtn.disabled = true;
+        exportBtn.disabled = true;
+        progressContainer.style.display = 'block';
+
+        // Set up initial empty table rows with loading status
+        domains.forEach((domain, idx) => {
+            const row = tbody.insertRow();
+            row.id = `row-${idx}`;
+            row.innerHTML = `
+                <td><strong>${domain}</strong></td>
+                <td><span class="status-badge status-pending">Queued</span></td>
+                <td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>
+            `;
+        });
+
+        // Run queries sequentially to respect the public endpoints rate limitations
+        for (let i = 0; i < domains.length; i++) {
+            const domain = domains[i];
+            const currentRow = document.getElementById(`row-${i}`);
+            currentRow.cells[1].innerHTML = `<span class="status-badge status-pending">Querying...</span>`;
+
+            // Display live progress updates
+            const progressPercent = ((i / domains.length) * 100).toFixed(0);
+            progressBar.style.width = `${progressPercent}%`;
+            progressText.innerText = `Processing: ${i + 1} / ${domains.length} (${domain})`;
+
+            let record = {
+                domain: domain,
+                status: 'Error',
+                registrar: 'N/A',
+                created: 'N/A',
+                expires: 'N/A',
+                updated: 'N/A',
+                nameservers: 'N/A'
+            };
+
+            try {
+                // Fetching from a free open public RDAP gateway aggregator
+                const response = await fetch(`https://openrdap.org/domain/${domain}`);
+                
+                if (response.status === 404) {
+                    record.status = 'Available / Not Registered';
+                } else if (!response.ok) {
+                    record.status = `HTTP ${response.status} Error`;
+                } else {
+                    const data = await response.json();
+                    record.status = 'Registered';
+
+                    // 1. Extract Registrar
+                    if (data.entities) {
+                        const registrarEntity = data.entities.find(e => e.roles && e.roles.includes('registrar'));
+                        if (registrarEntity && registrarEntity.vcardArray) {
+                            const fnData = registrarEntity.vcardArray[1].find(item => item[0] === 'fn');
+                            if (fnData) record.registrar = fnData[3];
+                        }
+                    }
+
+                    // 2. Extract Event Timestamps
+                    if (data.events) {
+                        const registrationEvent = data.events.find(e => e.eventAction === 'registration');
+                        const expirationEvent = data.events.find(e => e.eventAction === 'expiration');
+                        const lastChangedEvent = data.events.find(e => e.eventAction === 'last changed');
+
+                        if (registrationEvent) record.created = new Date(registrationEvent.eventDate).toISOString().split('T')[0];
+                        if (expirationEvent) record.expires = new Date(expirationEvent.eventDate).toISOString().split('T')[0];
+                        if (lastChangedEvent) record.updated = new Date(lastChangedEvent.eventDate).toISOString().split('T')[0];
+                    }
+
+                    // 3. Extract Name Servers
+                    if (data.nameservers) {
+                        record.nameservers = data.nameservers.map(ns => ns.ldhName).join(', ');
+                    }
+                }
+            } catch (err) {
+                record.status = 'Connection Failed';
+                console.error(`Error checking ${domain}:`, err);
+            }
+
+            lookupResults.push(record);
+
+            // Update UI row immediately with the real data
+            const statusClass = record.status === 'Registered' ? 'status-success' : 'status-error';
+            currentRow.innerHTML = `
+                <td><strong>${record.domain}</strong></td>
+                <td><span class="status-badge ${statusClass}">${record.status}</span></td>
+                <td>${record.registrar}</td>
+                <td>${record.created}</td>
+                <td>${record.expires}</td>
+                <td>${record.updated}</td>
+                <td title="${record.nameservers}">${record.nameservers}</td>
+            `;
+
+            // Polite 300ms pause to guard against aggressive rate-limiting on large sets
+            await sleep(300);
+        }
+
+        // Complete processing interface transitions
+        progressBar.style.width = '100%';
+        progressText.innerText = `Completed batch lookup of ${domains.length} domains.`;
+        startBtn.disabled = false;
+        exportBtn.disabled = false;
+    }
+
+    function exportToCSV() {
+        if (lookupResults.length === 0) return;
+
+        const headers = ['Domain', 'Status', 'Registrar', 'Registration Date', 'Expiration Date', 'Last Updated', 'Nameservers'];
+        
+        const csvRows = [
+            headers.join(','), // header row
+            ...lookupResults.map(row => [
+                `"${row.domain.replace(/"/g, '""')}"`,
+                `"${row.status.replace(/"/g, '""')}"`,
+                `"${row.registrar.replace(/"/g, '""')}"`,
+                `"${row.created.replace(/"/g, '""')}"`,
+                `"${row.expires.replace(/"/g, '""')}"`,
+                `"${row.updated.replace(/"/g, '""')}"`,
+                `"${row.nameservers.replace(/"/g, '""')}"`
+            ].join(','))
+        ];
+
+        const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
+        const encodedUri = encodeURI(csvContent);
+        
+        const downloadAnchor = document.createElement("a");
+        downloadAnchor.setAttribute("href", encodedUri);
+        downloadAnchor.setAttribute("download", `bulk_whois_export_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(downloadAnchor);
+        
+        downloadAnchor.click();
+        document.body.removeChild(downloadAnchor);
+    }
+</script>
+
+</body>
+</html>
