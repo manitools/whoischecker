@@ -232,12 +232,11 @@
 <script>
     let lookupResults = [];
 
-    // Helper sleep function to respect API limits and maintain window painting
+    // Helper sleep function to respect API limits
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     function cleanDomain(input) {
         let domain = input.trim().toLowerCase();
-        // Extract domain from URLs if users accidentally paste them
         domain = domain.replace(/^(https?:\/\/)?(www\.)?/, '');
         domain = domain.split('/')[0];
         return domain;
@@ -246,8 +245,6 @@
     async function processDomains() {
         const inputData = document.getElementById('domainsInput').value;
         const lines = inputData.split('\n');
-        
-        // Filter out empty lines
         const domains = [...new Set(lines.map(cleanDomain).filter(d => d.length > 0))];
 
         if (domains.length === 0) {
@@ -269,7 +266,7 @@
         exportBtn.disabled = true;
         progressContainer.style.display = 'block';
 
-        // Set up initial empty table rows with loading status
+        // Setup UI table lines
         domains.forEach((domain, idx) => {
             const row = tbody.insertRow();
             row.id = `row-${idx}`;
@@ -280,13 +277,12 @@
             `;
         });
 
-        // Run queries sequentially to respect the public endpoints rate limitations
+        // Loop over the requested domain set sequentially
         for (let i = 0; i < domains.length; i++) {
             const domain = domains[i];
             const currentRow = document.getElementById(`row-${i}`);
             currentRow.cells[1].innerHTML = `<span class="status-badge status-pending">Querying...</span>`;
 
-            // Display live progress updates
             const progressPercent = ((i / domains.length) * 100).toFixed(0);
             progressBar.style.width = `${progressPercent}%`;
             progressText.innerText = `Processing: ${i + 1} / ${domains.length} (${domain})`;
@@ -302,18 +298,25 @@
             };
 
             try {
-                // Fetching from a free open public RDAP gateway aggregator
-                const response = await fetch(`https://openrdap.org/domain/${domain}`);
+                // We use corsproxy.io to dynamically strip away the browser security block 
+                // and resolve the 302 redirects properly client-side.
+                const targetUrl = `https://rdap.org/domain/${domain}`;
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+                
+                const response = await fetch(proxyUrl, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
                 
                 if (response.status === 404) {
-                    record.status = 'Available / Not Registered';
+                    record.status = 'Available / Unregistered';
                 } else if (!response.ok) {
-                    record.status = `HTTP ${response.status} Error`;
+                    record.status = `HTTP Error ${response.status}`;
                 } else {
                     const data = await response.json();
                     record.status = 'Registered';
 
-                    // 1. Extract Registrar
+                    // 1. Parse out Registrar entity details
                     if (data.entities) {
                         const registrarEntity = data.entities.find(e => e.roles && e.roles.includes('registrar'));
                         if (registrarEntity && registrarEntity.vcardArray) {
@@ -322,7 +325,7 @@
                         }
                     }
 
-                    // 2. Extract Event Timestamps
+                    // 2. Parse out lifecycle dates
                     if (data.events) {
                         const registrationEvent = data.events.find(e => e.eventAction === 'registration');
                         const expirationEvent = data.events.find(e => e.eventAction === 'expiration');
@@ -333,19 +336,19 @@
                         if (lastChangedEvent) record.updated = new Date(lastChangedEvent.eventDate).toISOString().split('T')[0];
                     }
 
-                    // 3. Extract Name Servers
+                    // 3. Parse active nameservers
                     if (data.nameservers) {
                         record.nameservers = data.nameservers.map(ns => ns.ldhName).join(', ');
                     }
                 }
             } catch (err) {
-                record.status = 'Connection Failed';
+                record.status = 'Lookup Failed';
                 console.error(`Error checking ${domain}:`, err);
             }
 
             lookupResults.push(record);
 
-            // Update UI row immediately with the real data
+            // Update UI
             const statusClass = record.status === 'Registered' ? 'status-success' : 'status-error';
             currentRow.innerHTML = `
                 <td><strong>${record.domain}</strong></td>
@@ -357,11 +360,11 @@
                 <td title="${record.nameservers}">${record.nameservers}</td>
             `;
 
-            // Polite 300ms pause to guard against aggressive rate-limiting on large sets
-            await sleep(300);
+            // Wait 500ms to be a gentle consumer against the central servers
+            await sleep(500);
         }
 
-        // Complete processing interface transitions
+        // Wrap up execution
         progressBar.style.width = '100%';
         progressText.innerText = `Completed batch lookup of ${domains.length} domains.`;
         startBtn.disabled = false;
@@ -374,7 +377,7 @@
         const headers = ['Domain', 'Status', 'Registrar', 'Registration Date', 'Expiration Date', 'Last Updated', 'Nameservers'];
         
         const csvRows = [
-            headers.join(','), // header row
+            headers.join(','),
             ...lookupResults.map(row => [
                 `"${row.domain.replace(/"/g, '""')}"`,
                 `"${row.status.replace(/"/g, '""')}"`,
